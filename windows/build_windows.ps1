@@ -180,7 +180,7 @@ if (Test-Path $OUT) {
     }
     Remove-Item -Recurse -Force $OUT
 }
-New-Item -ItemType Directory -Force "$R\python", "$R\site-packages", "$R\app\firmware", "$R\lib", "$R\vcam", "$OUT\licenses" | Out-Null
+New-Item -ItemType Directory -Force "$R\python", "$R\site-packages", "$R\app", "$R\lib", "$R\vcam", "$OUT\licenses" | Out-Null
 Copy-Item "$BUILD\KinectCam.exe", "$BUILD\KinectCam-debug.exe" $OUT
 Copy-Item "$BUILD\kinect_setup.exe" $R
 
@@ -196,9 +196,11 @@ Remove-Item "$R\site-packages\cv2\opencv_videoio_ffmpeg*.dll" -ErrorAction Silen
 $msvcp = Get-ChildItem "$R\site-packages\numpy.libs\msvcp140*.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($msvcp) { Copy-Item $msvcp.FullName "$R\python\msvcp140.dll" } else { Write-Warning "msvcp140.dll not found in numpy.libs" }
 
-foreach ($f in 'kinectcam', 'kinect_device', 'kinect_audio', 'sound', 'usb_reset', 'winsetup') { Copy-Item "$SRC\$f.py" "$R\app\" }
-if (Test-Path "$SRC\firmware\audios.bin") { Copy-Item "$SRC\firmware\audios.bin" "$R\app\firmware\" }
-else { Write-Warning "firmware\audios.bin missing - the package works, but without the microphone features" }
+# KinectCam code. Microsoft's Kinect audio firmware is NOT included: the app downloads it
+# from Microsoft's official Xbox update on first launch, with the user's OK (mic_firmware.py).
+foreach ($f in 'kinectcam', 'kinect_device', 'kinect_audio', 'sound', 'usb_reset', 'winsetup', 'mic_firmware', 'fwfetcher') {
+    Copy-Item "$SRC\$f.py" "$R\app\"
+}
 Copy-Item "$DEPS\libusb\MinGW64\dll\libusb-1.0.dll" "$R\lib\"
 Copy-Item "$FN\build-x64\lib\libfreenect.dll" "$R\lib\"
 Copy-Item (Get-ChildItem "$DEPS\UnityCapture-master" -Recurse -Filter UnityCaptureFilter64.dll | Select-Object -First 1).FullName "$R\vcam\"
@@ -212,6 +214,7 @@ Copy-Item "$R\python\LICENSE.txt" "$OUT\licenses\Python.txt" -ErrorAction Silent
 Copy-Item "$FN\APACHE20" "$OUT\licenses\libfreenect-Apache-2.0.txt" -ErrorAction SilentlyContinue
 Copy-Item "$DEPS\libwdi-1.5.1\libwdi-1.5.1\COPYING-LGPL" "$OUT\licenses\libwdi-LGPL-3.txt" -ErrorAction SilentlyContinue
 [IO.File]::WriteAllText("$OUT\licenses\UnityCapture-MIT.txt", "Unity Capture (filter) - MIT License - https://github.com/schellingb/UnityCapture`r`n")
+[IO.File]::WriteAllText("$OUT\licenses\fwfetcher-BSD.txt", "fwfetcher.py - from libfreenect (OpenKinect), BSD-style licence, see the file header - https://github.com/OpenKinect/libfreenect`r`n")
 Copy-Item "$WIN\README-Windows.txt" "$OUT\README.txt"
 Copy-Item "$WIN\KinectCam diagnose.bat" $OUT
 [IO.File]::WriteAllText("$OUT\KinectCam debug.bat", "@echo off`r`ntitle KinectCam debug`r`nrem Runs KinectCam showing what it is doing (for troubleshooting).`r`n`"%~dp0KinectCam-debug.exe`"`r`necho.`r`necho KinectCam finished with code %errorlevel%`r`npause`r`n")

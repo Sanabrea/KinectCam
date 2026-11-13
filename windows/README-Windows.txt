@@ -10,6 +10,8 @@ START
      (for example Documents\KinectCam). Don't run it from inside the zip.
   2. Plug in the Kinect: USB plus its power adapter.
   3. Double-click KinectCam.exe.
+     If Windows shows "Windows protected your PC", click "More info", then
+     "Run anyway" (the app isn't signed with a paid certificate).
 
   The first time, Windows asks once for permission ("Do you want to allow
   this app to make changes...?"). Click Yes. KinectCam then:
