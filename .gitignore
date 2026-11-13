@@ -1,0 +1,19 @@
+# Python / local environment
+.venv/
+__pycache__/
+*.pyc
+
+# personal state
+settings.json
+.kinectcam.lock
+kinectcam.log
+snap_*.jpg
+.DS_Store
+
+# Microsoft's Kinect audio firmware: not ours to redistribute (see firmware/README.md)
+firmware/*.bin
+
+# build output
+dist/
+windows/_deps/
+windows/build/
