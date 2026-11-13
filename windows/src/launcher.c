@@ -81,11 +81,13 @@ static int restore_driver(const wchar_t* runtime)
 	return (int)code;
 }
 
+static HANDLE g_log = INVALID_HANDLE_VALUE;     /* the log, in the normal (no console) start */
+
 static void trace(const char* msg)
 {
 	/* plain Win32 output, independent of the C runtime: shows where a hard crash happens */
 	DWORD w;
-	HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
+	HANDLE h = g_log != INVALID_HANDLE_VALUE ? g_log : GetStdHandle(STD_ERROR_HANDLE);
 	if (h && h != INVALID_HANDLE_VALUE) { WriteFile(h, msg, (DWORD)strlen(msg), &w, NULL); WriteFile(h, "\r\n", 2, &w, NULL); }
 }
 
@@ -143,15 +145,12 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR cmdLine, int nShow)
 			SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(2));
 			SetStdHandle(STD_INPUT_HANDLE, (HANDLE)_get_osfhandle(0));
 		} else {
-			/* Python shares this C runtime (ucrtbase), so pointing file descriptors
-			   1 and 2 at the log makes print() and tracebacks land there. */
-			int fd = _wopen(logfile, _O_WRONLY | _O_CREAT | _O_TRUNC | _O_BINARY, _S_IREAD | _S_IWRITE);
-			if (fd >= 0) {
-				_dup2(fd, 1);
-				_dup2(fd, 2);
-				SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)_get_osfhandle(1));
-				SetStdHandle(STD_ERROR_HANDLE, (HANDLE)_get_osfhandle(2));
-			}
+			/* Start a fresh log for the launcher's own lines. Python opens the same file
+			   (KINECTCAM_LOG) itself and appends: redirecting file descriptors 1/2 here
+			   does not reach python312.dll's C runtime, and Python then exits with code 1
+			   before it can print anything. */
+			g_log = CreateFileW(logfile, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+			                    NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 		}
 	}
 
@@ -169,9 +168,13 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR cmdLine, int nShow)
 	if (!pyMain) { fail(L"Python runtime is damaged."); return 1; }
 
 	_snwprintf(script, MAX_PATH, L"%ls\\app\\kinectcam.py", runtime);
-	wchar_t* argv[] = { exe, L"-u", L"-X", L"faulthandler", script, NULL };
+	/* -X faulthandler only with a console: without one sys.stderr is None and Python 3.12
+	   aborts at startup (exit code 1, nothing printed). kinectcam.py enables the fault
+	   handler itself on the log file in the normal start. */
+	wchar_t* argv_dbg[] = { exe, L"-u", L"-X", L"faulthandler", script, NULL };
+	wchar_t* argv_gui[] = { exe, L"-u", script, NULL };
 	trace("[launcher] starting Python");
-	int rc = pyMain(5, argv);
+	int rc = debug ? pyMain(5, argv_dbg) : pyMain(3, argv_gui);
 	trace("[launcher] Python finished");
 	fflush(NULL);
 	if (debug) {

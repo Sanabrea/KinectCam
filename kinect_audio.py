@@ -91,21 +91,28 @@ class KinectAudio(threading.Thread):
             with open(path, "rb") as f:
                 fw = f.read()
             self._fw = ctypes.create_string_buffer(fw, len(fw))
-            if _lib.freenect_init(ctypes.byref(self._ctx), None) < 0:
-                self.state, self.error = "error", "freenect_init failed"
-                return
-            _lib.freenect_set_log_callback(self._ctx, self._log_cb)
-            _lib.freenect_set_log_level(self._ctx, kd.LOG_NOTICE)
-            _lib.freenect_set_fw_address_nui(self._ctx, ctypes.cast(self._fw, ctypes.c_void_p), len(fw))
-            _lib.freenect_select_subdevices(self._ctx, DEV_AUDIO)
             self.state = "loading firmware"
             ok = False
-            for attempt in range(3):
+            for attempt in range(20):    # Windows keeps the new device locked ~20 s after the upload
+                if not self._ctx:
+                    if _lib.freenect_init(ctypes.byref(self._ctx), None) < 0:
+                        self.state, self.error = "error", "freenect_init failed"
+                        return
+                    _lib.freenect_set_log_callback(self._ctx, self._log_cb)
+                    _lib.freenect_set_log_level(self._ctx, kd.LOG_NOTICE)
+                    _lib.freenect_set_fw_address_nui(self._ctx, ctypes.cast(self._fw, ctypes.c_void_p), len(fw))
+                    _lib.freenect_select_subdevices(self._ctx, DEV_AUDIO)
                 if _lib.freenect_num_devices(self._ctx) > 0 and \
                         _lib.freenect_open_device(self._ctx, ctypes.byref(self._dev), 0) >= 0:
                     ok = True
                     break
-                time.sleep(2.0)   # after a firmware upload the audio device re-enumerates
+                # After the firmware upload the audio device re-enumerates. On Windows
+                # libfreenect can't open the new device from the same context (stale
+                # device list), so start over with a fresh one, which rescans USB.
+                self._dev = vp()
+                _lib.freenect_shutdown(self._ctx)
+                self._ctx = vp()
+                time.sleep(2.0)
             if not ok:
                 self.state, self.error = "error", "could not open the Kinect audio device"
                 return

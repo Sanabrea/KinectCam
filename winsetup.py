@@ -115,13 +115,25 @@ def set_window_icon(title):
     """Give the OpenCV window KinectCam's icon (from KinectCam.exe), so the
     taskbar doesn't show a generic one."""
     try:
-        u32 = ctypes.windll.user32
+        # Own WinDLL instances with full 64-bit types: ctypes' default int return type
+        # truncates handles, which crashed LoadImageW with an access violation.
+        u32 = ctypes.WinDLL("user32")
+        k32 = ctypes.WinDLL("kernel32")
+        u32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+        u32.FindWindowW.restype = wintypes.HWND
+        k32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+        k32.GetModuleHandleW.restype = wintypes.HMODULE
+        u32.LoadImageW.argtypes = [wintypes.HINSTANCE, ctypes.c_void_p, wintypes.UINT,
+                                   ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        u32.LoadImageW.restype = wintypes.HANDLE
+        u32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        u32.SendMessageW.restype = ctypes.c_ssize_t
         hwnd = u32.FindWindowW(None, title)
         if not hwnd:
             return
-        hinst = ctypes.windll.kernel32.GetModuleHandleW(None)
+        hinst = k32.GetModuleHandleW(None)
         for size, which in ((16, 0), (32, 1)):                   # ICON_SMALL, ICON_BIG
-            icon = u32.LoadImageW(hinst, 1, 1, size, size, 0)     # resource 1, IMAGE_ICON
+            icon = u32.LoadImageW(hinst, ctypes.c_void_p(1), 1, size, size, 0)   # resource 1, IMAGE_ICON
             if icon:
                 u32.SendMessageW(hwnd, 0x0080, which, icon)       # WM_SETICON
     except Exception:  # noqa: BLE001

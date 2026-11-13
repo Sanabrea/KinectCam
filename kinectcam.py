@@ -24,6 +24,12 @@ import time
 
 IS_WIN = sys.platform == "win32"
 IS_MAC = sys.platform == "darwin"
+if IS_WIN and os.environ.get("KINECTCAM_LOG") and (sys.stdout is None or sys.stderr is None):
+    # KinectCam.exe (no console): send print() and tracebacks to the log file
+    _logf = open(os.environ["KINECTCAM_LOG"], "a", buffering=1, encoding="utf-8", errors="replace")
+    sys.stdout = sys.stderr = _logf
+    import faulthandler
+    faulthandler.enable(_logf)
 if IS_WIN:
     print(f"[start] Python {sys.version.split()[0]} on Windows, app files: {os.path.dirname(os.path.abspath(__file__))}",
           flush=True)
