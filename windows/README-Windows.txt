@@ -20,8 +20,11 @@ START
   plug it back in, and open KinectCam.exe again.
 
   Nothing else needs to be installed. Everything KinectCam needs is in this
-  folder (its own Python, OpenCV, numpy, libfreenect, libusb, the virtual
-  camera and the Kinect audio firmware).
+  folder (its own Python, OpenCV, numpy, libfreenect, libusb and the virtual
+  camera). The Kinect's microphones need a firmware file from Microsoft:
+  KinectCam offers to download it from Microsoft's official Xbox update on
+  first launch (about 116 MB, once). Say "Not now" to skip it; the
+  "Get mic support" button gets it later.
 
 USE IT IN CALLS
   In Zoom, Teams, Meet (Chrome/Edge), OBS, Discord...: choose the camera
@@ -46,5 +49,3 @@ If you move the KinectCam folder, it registers the virtual camera again at
 the next start (one more Yes).
 
 Windows "N" editions need Microsoft's free Media Feature Pack for OpenCV.
-The Kinect audio firmware (runtime\app\firmware\audios.bin) belongs to
-Microsoft and is included for your personal use only.

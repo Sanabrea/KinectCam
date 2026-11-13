@@ -21,7 +21,6 @@ mkdir -p "$BUILD"
 need() { [ -e "$1" ] || { echo "missing $1 - see windows/README-build.md"; exit 1; }; }
 need "$TC/$CC"
 need "$DEPS/python/python-3.12.10-embed-amd64.zip"
-need "$SRC/firmware/audios.bin"
 
 # ---------------------------------------------------------------- libusb
 if [ ! -f "$DEPS/prefix-x64/bin/libusb-1.0.dll" ]; then
@@ -104,7 +103,7 @@ $CC -municode -o "$BUILD/kinect_setup.exe" "$BUILD/kinect_setup.o" "$BUILD/pki.o
 # --------------------------------------------------------------- package
 echo "== assembling $OUT"
 rm -rf "$OUT"
-mkdir -p "$R/python" "$R/site-packages" "$R/app/firmware" "$R/lib" "$R/vcam" "$OUT/licenses"
+mkdir -p "$R/python" "$R/site-packages" "$R/app" "$R/lib" "$R/vcam" "$OUT/licenses"
 cp "$BUILD/KinectCam.exe" "$OUT/"
 cp "$BUILD/KinectCam-debug.exe" "$OUT/"
 cp "$BUILD/kinect_setup.exe" "$R/"
@@ -116,8 +115,7 @@ rm -f "$R/site-packages"/cv2/opencv_videoio_ffmpeg*.dll          # video files a
 # Microsoft C++ runtime for the virtual camera module (app-local copy from numpy's wheel)
 cp "$R/site-packages"/numpy.libs/msvcp140-*.dll "$R/python/msvcp140.dll"
 
-cp "$SRC"/{kinectcam,kinect_device,kinect_audio,sound,usb_reset,winsetup}.py "$R/app/"
-cp "$SRC/firmware/audios.bin" "$R/app/firmware/"
+cp "$SRC"/{kinectcam,kinect_device,kinect_audio,sound,usb_reset,winsetup,mic_firmware,fwfetcher}.py "$R/app/"   # firmware: downloaded on first launch
 cp "$DEPS/prefix-x64/bin/libusb-1.0.dll" "$R/lib/"
 cp "$FN/build-x64/lib/libfreenect.dll" "$R/lib/"
 cp "$DEPS/unitycapture/UnityCapture-master/Install/UnityCaptureFilter64.dll" "$R/vcam/"

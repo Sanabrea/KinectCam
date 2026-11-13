@@ -3,13 +3,31 @@
 Turns an Xbox 360 Kinect (model 1414/1473) into a webcam for Zoom, Teams, Meet, FaceTime, OBS and other apps.
 It shows up in those apps as **"OBS Virtual Camera"**.
 
+## Download (no technical knowledge needed)
+
+**Mac (Apple Silicon: M1 or newer, macOS 13+):**
+
+1. Download **[KinectCam-mac.zip](https://github.com/Sanabrea/KinectCam/releases/latest/download/KinectCam-mac.zip)** and double-click it to unzip.
+2. Drag **KinectCam** into your **Applications** folder.
+3. Plug in the Kinect (USB and its power adapter).
+4. **The first time only,** right-click KinectCam and choose **Open**, then **Open** again.
+   The app isn't signed with a paid Apple developer certificate, so macOS asks once.
+   On newer macOS: if it only offers "Done"/"Move to Trash", open **System Settings → Privacy & Security**, scroll down, click **Open Anyway** next to KinectCam, and confirm.
+5. KinectCam asks whether to turn on the microphones. Click **Download**: it fetches the Kinect's microphone firmware from Microsoft (about 116 MB, once).
+
+To use it in Zoom, Teams, Meet and others, install the free [OBS Studio](https://obsproject.com) once. Open it, click **Start Virtual Camera**, and allow the system extension. Then choose **OBS Virtual Camera** as the camera in your video app.
+
+**Windows:** coming soon (the driver setup is still being finished).
+
+Developers: see [Build from source](#build-from-source).
+
 ## Start
 
 Plug in the Kinect (USB and its power adapter), then open **KinectCam** from `~/Applications`, Launchpad or Spotlight.
 You can also drag it to the Dock.
 
 **KinectCam.app is self-contained.** It carries its own Python 3.12, numpy, OpenCV, pyvirtualcam,
-libfreenect, libusb and the Kinect audio firmware, so nothing needs to be installed (Apple Silicon Mac, macOS 13+).
+libfreenect and libusb, so nothing needs to be installed (Apple Silicon Mac, macOS 13+). The Kinect's microphone firmware belongs to Microsoft, so it isn't included: the app downloads it from Microsoft's official Xbox update on first launch, after asking.
 The one exception is **Cam out**. The OBS Virtual Camera is a macOS camera extension that only a signed app can install,
 so other apps can see the Kinect only if OBS Studio is installed. Without it, the preview, snapshots and everything else still work.
 
@@ -98,7 +116,7 @@ The Kinect has 4 microphones in a row. KinectCam uses all 4 to work out where so
 - **Grid (button or X):** rule-of-thirds lines, plus dashed lines every 15° labelled with the same angles the microphones report.
 - **Voice steer (button or T):** with Follow on, the camera follows whichever face the voice is coming from.
 - **Status line:** shows the mic mode, a level meter, the voice angle and the number of sources.
-- **Firmware:** the Kinect's audio chip needs Microsoft's firmware at every power-up. It's stored in `firmware/audios.bin`, which was extracted from Microsoft's official Xbox 360 system update with libfreenect's `fwfetcher.py`. If the file is missing, the mic features turn off and everything else keeps working. Start with `--no-mic` to disable them.
+- **Firmware:** the Kinect's audio chip needs Microsoft's firmware at every power-up. On first launch the app asks to download it from Microsoft's official Xbox 360 system update and unpacks it with libfreenect's `fwfetcher.py` (`mic_firmware.py`; the result is checked against a known SHA-256). It's kept in the app's data folder; a `firmware/audios.bin` next to the code also works. If the file is missing, the mic features turn off and everything else keeps working. Start with `--no-mic` to disable them.
 - **How well it works:** in testing, voices from the left, center and right read about -40°, 0° and +41°. Two simultaneous talkers 50° apart were separated cleanly. About 6% of audio packets are lost through the dock, which doesn't affect direction finding.
 
 ## HD mode

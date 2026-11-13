@@ -33,7 +33,7 @@ _lib.freenect_set_fw_address_nui.restype = None
 
 DEV_AUDIO = 0x04
 RATE = 16000
-FIRMWARE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "firmware", "audios.bin")
+FIRMWARE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "firmware", "audios.bin")   # legacy location
 
 
 class KinectAudio(threading.Thread):
@@ -83,10 +83,12 @@ class KinectAudio(threading.Thread):
 
     def run(self):
         try:
-            if not os.path.exists(FIRMWARE):
-                self.state, self.error = "no firmware", f"missing {FIRMWARE}"
+            import mic_firmware
+            path = mic_firmware.find()
+            if not path:
+                self.state, self.error = "no firmware", "the Kinect audio firmware isn't downloaded yet"
                 return
-            with open(FIRMWARE, "rb") as f:
+            with open(path, "rb") as f:
                 fw = f.read()
             self._fw = ctypes.create_string_buffer(fw, len(fw))
             if _lib.freenect_init(ctypes.byref(self._ctx), None) < 0:

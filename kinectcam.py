@@ -84,6 +84,36 @@ def app_alert(message, wait=True):
 _splash_last = [[], (200, 200, 200)]
 
 
+def ask_yes_no(message, yes="Download", no="Not now"):
+    """Native Yes/No question. Returns True for yes."""
+    try:
+        if IS_WIN:
+            import ctypes
+            return ctypes.windll.user32.MessageBoxW(None, message, "KinectCam", 0x4 | 0x20 | 0x10000) == 6
+        if IS_MAC:
+            import json as _json
+            import subprocess
+            script = (f'button returned of (display dialog {_json.dumps(message)} with title "KinectCam" '
+                      f'buttons {{{_json.dumps(no)}, {_json.dumps(yes)}}} default button {_json.dumps(yes)})')
+            r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+            return r.stdout.strip() == yes
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+# microphone status shown on the button and in the status line
+MIC_UI = {"state": "off", "text": "mic off"}
+
+FW_QUESTION = ("Turn on the Kinect's microphones?\n\n"
+               "The Kinect's 4-microphone array needs a small firmware file from Microsoft. "
+               "KinectCam can download it now from Microsoft's official Xbox update "
+               "(about 116 MB, once).\n\n"
+               "Without it everything else works; only the sound features "
+               "(sound dots, mic focus, voice steer) stay off. "
+               "You can get it later with the \"Get mic support\" button.")
+
+
 def splash(win, lines, color=(200, 200, 200)):
     """Full-window message while starting. lines=None just repaints (keeps the window alive)."""
     if lines is None:
@@ -132,9 +162,10 @@ DEFAULTS = {
     "grid": False,            # angle grid + rule of thirds on the preview
     "sound_dots": True,       # mark sound sources on the preview
     "mic_focus": "all",       # "all": every sound around; "me": only sound from the tracked person
-    "mic_sign": -1,
-    "mic_gain": 1.0,          # angle scale/offset from calibrate_mic.py
-    "mic_offset": 0.0,           # -1: positive voice angles are on the LEFT of the image (calibrated with a phone alarm, 2026-11-13)
+    "mic_sign": -1,           # -1: positive voice angles are on the LEFT of the image (Kinect 1414)
+    "mic_gain": 1.0,          # angle scale/offset from the Calibrate mic wizard
+    "mic_offset": 0.0,
+    "mic_fw_declined": False, # said "Not now" to downloading the mic firmware from Microsoft
 }
 
 
@@ -708,7 +739,10 @@ def button_label(act, S, vcam, calib=None):
         "grid": ("Grid " + onoff(S["grid"]), S["grid"]),
         "auto_exposure": ("Auto exp. " + onoff(S["auto_exposure"]), S["auto_exposure"]),
         "auto_wb": ("Auto WB " + onoff(S["auto_wb"]), S["auto_wb"]),
-        "calibrate": (("Stop calib." if calib and calib.active else "Calibrate mic"), bool(calib and calib.active)),
+        "calibrate": ((("Stop calib." if calib and calib.active else "Calibrate mic"), bool(calib and calib.active))
+                      if MIC_UI["state"] == "ok" else
+                      ((MIC_UI["text"].replace("mic support: ", "Mic ") if MIC_UI["state"] == "fetching"
+                        else "Get mic support"), MIC_UI["state"] == "fetching")),
     }[act]
 
 
@@ -1084,7 +1118,7 @@ def render_preview(out, src, framer, target, S, tilt_state, vcam, fps, ui, sound
 
     panel = np.full((PANEL_H, PREVIEW_W, 3), 32, np.uint8)
     if sound is None:
-        mic = "mic off"
+        mic = MIC_UI["text"]
     else:
         lvl = int(np.clip(((sound["level"] if sound["level"] is not None else -120) + 70) / 50 * 10, 0, 10))
         where = f"{sound['angle']:+.0f} deg" if (sound["speaking"] and sound["angle"] is not None) else "-"
@@ -1252,21 +1286,44 @@ def main():
     cap.dev.set_flag(fk.FLAG_AUTO_EXPOSURE, S["auto_exposure"])
     cap.dev.set_flag(fk.FLAG_AUTO_WHITE_BALANCE, S["auto_wb"])
 
-    # ---- microphone array (needs firmware/audios.bin)
-    audio = locator = None
-    if not args.no_mic:
+    # ---- microphone array (needs Microsoft's audio firmware, downloaded on request)
+    import mic_firmware
+    audio = locator = fetcher = None
+
+    def start_mic():
         try:
-            from kinect_audio import KinectAudio, FIRMWARE
+            from kinect_audio import KinectAudio
             from sound import SoundLocator
-            if os.path.exists(FIRMWARE):
-                audio, locator = KinectAudio(), SoundLocator()
-                audio.start()
-                print("[ok] microphone array starting")
-            else:
-                print("[info] mic array off: firmware/audios.bin missing (see README)")
+            a, loc = KinectAudio(), SoundLocator()
+            a.start()
+            MIC_UI.update(state="ok", text="mic on")
+            print("[ok] microphone array starting")
+            return a, loc
         except Exception as e:  # noqa: BLE001
+            MIC_UI.update(state="off", text="mic unavailable")
             print("[warn] mic array unavailable:", e)
-            audio = locator = None
+            return None, None
+
+    def start_fetch():
+        f = mic_firmware.Fetcher()
+        f.start()
+        MIC_UI.update(state="fetching", text="mic support: 0%")
+        print("[..] downloading the microphone firmware from Microsoft")
+        return f
+
+    if args.no_mic:
+        MIC_UI.update(state="off", text="mic off")
+    elif mic_firmware.find():
+        audio, locator = start_mic()
+    else:
+        MIC_UI.update(state="missing", text="mic off (no firmware)")
+        print("[info] mic array off: the Kinect audio firmware isn't here yet")
+        if not headless and not S["mic_fw_declined"]:
+            if ask_yes_no(FW_QUESTION):
+                fetcher = start_fetch()
+            else:
+                S["mic_fw_declined"] = True
+                save_settings(S)
     mic_votes = 0
     calib = None
     face_mem = FaceMemory()
@@ -1320,6 +1377,21 @@ def main():
                 src = full.copy()
                 if S["enhance"] or S["mode"] == "night":
                     src = enhance(src)
+
+            # ---- microphone firmware download in the background
+            if fetcher is not None:
+                if fetcher.state == "done":
+                    fetcher = None
+                    audio, locator = start_mic()
+                elif fetcher.state == "failed":
+                    MIC_UI.update(state="missing", text="mic download failed")
+                    app_alert("Couldn't download the microphone firmware:\n" + str(fetcher.error) +
+                              "\n\nCheck the internet connection and press \"Get mic support\" to try again.",
+                              wait=False)
+                    fetcher = None
+                else:
+                    MIC_UI["text"] = (f"mic support: {fetcher.progress * 100:.0f}%" if fetcher.state == "downloading"
+                                      else "mic support: unpacking")
 
             # ---- sound: where is the voice coming from?
             sound = None
@@ -1460,6 +1532,7 @@ def main():
                     ui["pending"].append("quit")
 
             # ---- run actions from keys and button clicks
+            offer_mic = False
             while ui["pending"]:
                 act = ui["pending"].pop(0)
                 ui["flash"] = (act, now)
@@ -1521,6 +1594,10 @@ def main():
                 elif act == "hd":
                     S["hd"] = not S["hd"]
                     cap.set_hd(S["hd"])
+                elif act in ("voice_steer", "mic_focus", "sound_dots") and locator is None and S.get("_mic_offer", True):
+                    offer_mic = True            # a sound feature without microphones: offer the firmware
+                    S["_mic_offer"] = False     # once per session, then the buttons just toggle
+                    ui["pending"].insert(0, act)
                 elif act == "voice_steer":
                     S["voice_steer"] = not S["voice_steer"]
                     if S["voice_steer"] and locator is None:
@@ -1533,7 +1610,7 @@ def main():
                     if calib is not None and calib.active:
                         calib.cancel(now)
                     elif locator is None or audio is None:
-                        print("[info] calibration needs the mic array (firmware/audios.bin)")
+                        offer_mic = True
                     else:
                         calib = MicCalibration(now, S["mic_gain"], S["mic_offset"], S["mic_sign"])
                         print("[..] mic calibration started")
@@ -1549,6 +1626,14 @@ def main():
                                         time.strftime("KinectCam %Y-%m-%d %H.%M.%S.jpg"))
                     cv2.imwrite(path, out)
                     print("[ok] snapshot saved:", path)
+
+            # ---- microphone wanted but no firmware yet: ask, then download automatically
+            if offer_mic and fetcher is None and not args.no_mic:
+                if mic_firmware.find():
+                    audio, locator = start_mic()
+                elif args.test or ask_yes_no(FW_QUESTION):
+                    S["mic_fw_declined"] = False
+                    fetcher = start_fetch()
 
             if args.test:
                 if n in (1, args.test // 2, args.test) or n % 30 == 0:

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Build a self-contained KinectCam.app: its own Python 3.12, numpy, OpenCV,
-# pyvirtualcam, libfreenect, libusb and the Kinect audio firmware.
+# pyvirtualcam, libfreenect and libusb. Microsoft's Kinect audio firmware is NOT
+# included: the app downloads it from Microsoft on first launch, with the user's OK.
 # Nothing needs to be installed on the Mac that runs it (Apple Silicon, macOS 13+).
 #
 #   ./build_app.sh            -> dist/KinectCam.app, copied to ~/Applications
@@ -18,10 +19,9 @@ C="$APP/Contents"
 echo "== python:     $PY_HOME"
 echo "== libfreenect: $FREENECT"
 echo "== libusb:     $LIBUSB"
-[ -f "$SRC/firmware/audios.bin" ] || { echo "firmware/audios.bin missing"; exit 1; }
 
 rm -rf "$APP"
-mkdir -p "$C/MacOS" "$C/Resources/app/firmware" "$C/Frameworks"
+mkdir -p "$C/MacOS" "$C/Resources/app" "$C/Frameworks"
 
 # --- Python runtime (stdlib only; trimmed) + packages
 rsync -a --exclude 'lib/python3.12/test' --exclude 'lib/python3.12/idlelib' \
@@ -35,9 +35,8 @@ cp "$PY_HOME/bin/python3.12" "$C/MacOS/kinectcam-python"
 rsync -a --exclude '__pycache__' --exclude '*.dist-info' --exclude 'pip*' --exclude '_virtualenv*' \
       --exclude 'distutils-precedence.pth' "$SITE/" "$C/Resources/site-packages/"
 
-# --- KinectCam code + firmware
-cp kinectcam.py kinect_device.py kinect_audio.py sound.py usb_reset.py macquit.py "$C/Resources/app/"
-cp firmware/audios.bin "$C/Resources/app/firmware/"
+# --- KinectCam code (no firmware: see mic_firmware.py)
+cp kinectcam.py kinect_device.py kinect_audio.py sound.py usb_reset.py macquit.py mic_firmware.py fwfetcher.py "$C/Resources/app/"
 
 # --- native Kinect libraries, rewired to load from inside the app
 cp "$FREENECT" "$C/Frameworks/libfreenect.dylib"
